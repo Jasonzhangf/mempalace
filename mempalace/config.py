@@ -123,6 +123,42 @@ class MempalaceConfig:
         """Mapping of hall names to keyword lists."""
         return self._file_config.get("hall_keywords", DEFAULT_HALL_KEYWORDS)
 
+    @property
+    def webdav_url(self):
+        """WebDAV server URL for backup."""
+        env_val = os.environ.get("MEMPALACE_WEBDAV_URL")
+        if env_val:
+            return env_val
+        return self._file_config.get("webdav_url", "")
+
+    @property
+    def webdav_username(self):
+        """WebDAV username."""
+        env_val = os.environ.get("MEMPALACE_WEBDAV_USERNAME")
+        if env_val:
+            return env_val
+        return self._file_config.get("webdav_username", "")
+
+    @property
+    def webdav_password(self):
+        """WebDAV password."""
+        env_val = os.environ.get("MEMPALACE_WEBDAV_PASSWORD")
+        if env_val:
+            return env_val
+        return self._file_config.get("webdav_password", "")
+
+    @property
+    def webdav_path(self):
+        """WebDAV remote path for backups."""
+        env_val = os.environ.get("MEMPALACE_WEBDAV_PATH")
+        if env_val:
+            return env_val
+        return self._file_config.get("webdav_path", "/mempalace")
+
+    def has_webdav_config(self):
+        """Check if WebDAV is configured."""
+        return bool(self.webdav_url and self.webdav_username and self.webdav_password)
+
     def init(self):
         """Create config directory and write default config.json if it doesn't exist."""
         self._config_dir.mkdir(parents=True, exist_ok=True)
@@ -132,6 +168,10 @@ class MempalaceConfig:
                 "collection_name": DEFAULT_COLLECTION_NAME,
                 "topic_wings": DEFAULT_TOPIC_WINGS,
                 "hall_keywords": DEFAULT_HALL_KEYWORDS,
+                "webdav_url": "",
+                "webdav_username": "",
+                "webdav_password": "",
+                "webdav_path": "/mempalace",
             }
             with open(self._config_file, "w") as f:
                 json.dump(default_config, f, indent=2)

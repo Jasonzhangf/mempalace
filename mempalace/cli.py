@@ -33,6 +33,7 @@ from . import __version__
 from pathlib import Path
 
 from .config import MempalaceConfig
+from .backup import cmd_backup, cmd_restore, cmd_backup_list, cmd_backup_test
 
 
 def cmd_serve(args):
@@ -603,6 +604,26 @@ def main():
     p_kg_query.add_argument("--as-of", default=None, help="Query as of date (YYYY-MM-DD)")
     p_kg_query.add_argument("--direction", default="both", choices=["out", "in", "both"], help="Relationship direction")
 
+    # Backup commands
+    p_backup = sub.add_parser("backup", help="Backup MemPalace to WebDAV or local ZIP")
+    p_backup.add_argument("--webdav", action="store_true", help="Upload to WebDAV (default if configured)")
+    p_backup.add_argument("--output", "-o", help="Local output path for ZIP file")
+    p_backup.add_argument("--keep", action="store_true", help="Keep local ZIP after WebDAV upload")
+
+    p_restore = sub.add_parser("restore", help="Restore MemPalace from backup")
+    p_restore.add_argument("--file", "-f", help="Restore from local ZIP file")
+    p_restore.add_argument("--webdav", action="store_true", help="Restore from WebDAV")
+    p_restore.add_argument("--latest", action="store_true", help="Restore latest backup from WebDAV")
+    p_restore.add_argument("--force", action="store_true", help="Skip confirmation prompt")
+
+    p_backup_list = sub.add_parser("backup-list", help="List available backups on WebDAV")
+
+    p_backup_test = sub.add_parser("backup-test", help="Test WebDAV connection")
+    p_backup_test.add_argument("--url", help="WebDAV URL (override config)")
+    p_backup_test.add_argument("--username", "-u", help="WebDAV username (override config)")
+    p_backup_test.add_argument("--password", "-p", help="WebDAV password (override config)")
+    p_backup_test.add_argument("--path", help="WebDAV remote path (override config)")
+
     args = parser.parse_args()
 
     if not args.command:
@@ -625,6 +646,10 @@ def main():
     dispatch["kg"] = cmd_kg
     dispatch["kg-add"] = cmd_kg_add
     dispatch["kg-query"] = cmd_kg_query
+    dispatch["backup"] = cmd_backup
+    dispatch["restore"] = cmd_restore
+    dispatch["backup-list"] = cmd_backup_list
+    dispatch["backup-test"] = cmd_backup_test
     dispatch[args.command](args)
 
 
