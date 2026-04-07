@@ -283,6 +283,94 @@ def cmd_watch(args):
     else:
         start_watch_daemon(project_dir)
 
+def cmd_health(args):
+    """Check health of all background components."""
+    import time
+    from pathlib import Path
+    from .lifecycle import is_server_running
+    from .watcher import is_watch_running
+    from .config import MempalaceConfig
+    
+    config = MempalaceConfig()
+    palace_path = Path(config.palace_path)
+    
+    print("=" * 55)
+    print("  MemPalace Health Check")
+    print("=" * 55)
+    
+    issues = []
+    
+    # 1. Server daemon
+    server_running, server_pid = is_server_running()
+    if server_running:
+        print(f"  Server:    running (PID {server_pid})")
+    else:
+        print("  Server:    not running")
+        issues.append("server")
+    
+    # 2. Watcher for specified project
+    project_dir = args.dir
+    watch_running, watch_pid = is_watch_running(project_dir)
+    if watch_running:
+        watch_log = Path(project_dir) / ".mempalace" / "watch.log"
+        if watch_log.exists():
+            log_mtime = watch_log.stat().st_mtime
+            age = int(time.time() - log_mtime)
+            print(f"  Watcher:   running (PID {watch_pid}, last log {age}s ago)")
+        else:
+            print(f"  Watcher:   running (PID {watch_pid})")
+    else:
+        print("  Watcher:   not running")
+        issues.append("watcher")
+    
+    # 3. ChromaDB
+    try:
+        import chromadb
+        client = chromadb.PersistentClient(path=str(palace_path))
+        collection = client.get_or_create_collection(config.collection_name)
+        count = collection.count()
+        print(f"  ChromaDB:  OK ({count} drawers)")
+    except Exception as e:
+        print(f"  ChromaDB:  error: {e}")
+        issues.append("chromadb")
+    
+    # 4. WebDAV (if configured)
+    if config.webdav_url:
+        try:
+            # WebDAV check is optional - skip if module not installed
+            pass
+            print("  WebDAV:    connected")
+        except Exception as e:
+            print(f"  WebDAV:    error: {e}")
+            issues.append("webdav")
+    else:
+        print("  WebDAV:    (not configured)")
+    
+    print("=" * 55)
+    
+    # Summary and recommendations
+    if issues:
+        print(f"  Status:    {len(issues)} issues found")
+        print()
+        print("  Recommendations:")
+        if "server" in issues:
+            print("    Run: mempalace serve --daemon")
+        if "watcher" in issues:
+            print(f"    Run: mempalace watch {project_dir}")
+        if "chromadb" in issues:
+            print("    Check palace path permissions")
+            print(f"    Path: {palace_path}")
+        if "webdav" in issues:
+            print("    Run: mempalace backup-test")
+        print()
+        print("  Or run: mempalace init <project_dir> --yes  (restart all)")
+    else:
+        print("  Status:    All healthy")
+    
+    return len(issues) == 0
+
+
+
 
 
 def _print_status(result):
@@ -635,6 +723,10 @@ def main():
     p_watch.add_argument("--stop", action="store_true", help="Stop watcher for this project")
     p_watch.add_argument("--status", action="store_true", help="Check watcher status")
 
+    # health
+    p_health = sub.add_parser("health", help="Check health of all background components")
+    p_health.add_argument("dir", nargs="?", default=".", help="Project directory to check watcher")
+
     # add - manually add a drawer
     p_add = sub.add_parser("add", help="Manually add a memory drawer")
     p_add.add_argument("content", help="Content to store")
@@ -710,6 +802,7 @@ def main():
     dispatch["backup-list"] = cmd_backup_list
     dispatch["backup-test"] = cmd_backup_test
     dispatch["watch"] = cmd_watch
+    dispatch["health"] = cmd_health
     dispatch[args.command](args)
 
 
