@@ -2,6 +2,10 @@
 """
 MemPalace — Give your AI a memory. No API key required.
 
+NOTE: Global options like --palace must come BEFORE the subcommand:
+    mempalace --palace /custom/path init ~/project
+    mempalace --palace /custom/path mine ~/project
+
 Two ways to ingest:
   Projects:      mempalace mine ~/projects/my_app          (code, docs, notes)
   Conversations: mempalace mine ~/chats/ --mode convos     (Claude, ChatGPT, Slack)
@@ -470,7 +474,7 @@ def main():
     parser.add_argument(
         "--palace",
         default=None,
-        help="Where the palace lives (default: from ~/.mempalace/config.json or ~/.mempalace/palace)",
+        help="Where the palace lives (default: ~/.mempalace/palace). NOTE: --palace must be BEFORE subcommand, e.g. 'mempalace --palace /path init <dir>'",
     )
     parser.add_argument(
         "--version", "-V",
