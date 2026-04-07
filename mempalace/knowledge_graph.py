@@ -382,3 +382,28 @@ class KnowledgeGraph:
             # Interests
             for interest in facts.get("interests", []):
                 self.add_triple(name, "loves", interest.capitalize(), valid_from="2025-01-01")
+
+    def get_stats(self):
+        """Get overview statistics of the knowledge graph."""
+        conn = self._conn()
+        
+        # Count unique entities (subjects + objects)
+        cursor = conn.execute("SELECT DISTINCT subject FROM triples WHERE valid_to IS NULL")
+        subjects = set(row[0] for row in cursor.fetchall())
+        cursor = conn.execute("SELECT DISTINCT object FROM triples WHERE valid_to IS NULL")
+        objects = set(row[0] for row in cursor.fetchall())
+        entities = len(subjects | objects)
+        
+        # Count unique predicates
+        cursor = conn.execute("SELECT DISTINCT predicate FROM triples WHERE valid_to IS NULL")
+        relations = len(cursor.fetchall())
+        
+        # Count total active triples
+        cursor = conn.execute("SELECT COUNT(*) FROM triples WHERE valid_to IS NULL")
+        triples = cursor.fetchone()[0]
+        
+        return {
+            "entities": entities,
+            "relations": relations,
+            "triples": triples
+        }

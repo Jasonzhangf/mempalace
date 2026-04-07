@@ -1,5 +1,9 @@
 """Allow running as: python -m mempalace"""
 
-from .cli import main
+try:
+    from .cli import main
+except ImportError:
+    # When running as pyinstaller binary
+    from mempalace.cli import main
 
 main()

@@ -217,6 +217,11 @@ def print_proposed_structure(project_name: str, rooms: list, total_files: int, s
 
 def get_user_approval(rooms: list) -> list:
     """Same approval flow as AI version."""
+    # Check for non-interactive mode from environment or sys.argv
+    if "--yes" in sys.argv or os.environ.get("MEMPALACE_YES"):
+        print("  Auto-accepting all rooms (non-interactive mode).")
+        return rooms
+
     print("  Review the proposed rooms above.")
     print("  Options:")
     print("    [enter]  Accept all rooms")

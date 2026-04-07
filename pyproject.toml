@@ -9,9 +9,9 @@ description = "Give your AI a memory — mine projects and conversations into a 
 readme = "README.md"
 requires-python = ">=3.9"
 license = "MIT"
-authors = [
-    {name = "milla-jovovich"},
-]
+ authors = [
+     {name = "Jasonzhangf"},
+ ]
 keywords = [
     "ai", "memory", "llm", "rag", "chromadb", "mcp",
     "vector-database", "claude", "chatgpt", "embeddings",
@@ -33,10 +33,10 @@ dependencies = [
     "pyyaml>=6.0",
 ]
 
-[project.urls]
-Homepage = "https://github.com/milla-jovovich/mempalace"
-Repository = "https://github.com/milla-jovovich/mempalace"
-"Bug Tracker" = "https://github.com/milla-jovovich/mempalace/issues"
+ [project.urls]
+ Homepage = "https://github.com/Jasonzhangf/mempalace"
+ Repository = "https://github.com/Jasonzhangf/mempalace"
+ "Bug Tracker" = "https://github.com/Jasonzhangf/mempalace/issues"
 
 [tool.setuptools.packages.find]
 include = ["mempalace*"]
@@ -45,6 +45,7 @@ include = ["mempalace*"]
 mempalace = "mempalace:main"
 
 [project.optional-dependencies]
+binary = ["pyinstaller>=6.0"]
 dev = ["pytest>=7.0", "build>=1.0", "twine>=4.0"]
 
 [tool.ruff]

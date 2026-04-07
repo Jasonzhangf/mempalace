@@ -28,9 +28,19 @@ def search(query: str, palace_path: str, wing: str = None, room: str = None, n_r
     # Build where filter
     where = {}
     if wing and room:
-        where = {"$and": [{"wing": wing}, {"room": room}]}
+        # Support multiple wings (comma-separated)
+        if "," in wing:
+            wings_list = [w.strip() for w in wing.split(",")]
+            where = {"$and": [{"wing": {"$in": wings_list}}, {"room": room}]}
+        else:
+            where = {"$and": [{"wing": wing}, {"room": room}]}
     elif wing:
-        where = {"wing": wing}
+        # Support multiple wings (comma-separated)
+        if "," in wing:
+            wings_list = [w.strip() for w in wing.split(",")]
+            where = {"wing": {"$in": wings_list}}
+        else:
+            where = {"wing": wing}
     elif room:
         where = {"room": room}
 
@@ -100,9 +110,19 @@ def search_memories(
     # Build where filter
     where = {}
     if wing and room:
-        where = {"$and": [{"wing": wing}, {"room": room}]}
+        # Support multiple wings (comma-separated)
+        if "," in wing:
+            wings_list = [w.strip() for w in wing.split(",")]
+            where = {"$and": [{"wing": {"$in": wings_list}}, {"room": room}]}
+        else:
+            where = {"$and": [{"wing": wing}, {"room": room}]}
     elif wing:
-        where = {"wing": wing}
+        # Support multiple wings (comma-separated)
+        if "," in wing:
+            wings_list = [w.strip() for w in wing.split(",")]
+            where = {"wing": {"$in": wings_list}}
+        else:
+            where = {"wing": wing}
     elif room:
         where = {"room": room}
 

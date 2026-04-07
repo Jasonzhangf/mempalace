@@ -382,6 +382,14 @@ def mine(
     print('\n  Next: mempalace search "what you\'re looking for"')
     print(f"{'=' * 55}\n")
 
+    return {
+        "wing": wing,
+        "files_processed": len(files) - files_skipped,
+        "files_skipped": files_skipped,
+        "total_drawers": total_drawers,
+        "room_counts": dict(room_counts),
+    }
+
 
 # =============================================================================
 # STATUS

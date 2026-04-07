@@ -29,9 +29,42 @@ Examples:
 import os
 import sys
 import argparse
+from . import __version__
 from pathlib import Path
 
 from .config import MempalaceConfig
+
+
+def cmd_serve(args):
+    """Start mempalace server."""
+    from .server import run_server
+
+    run_server(
+        palace_path=args.palace,
+        socket_path=args.socket,
+        port=args.port,
+        daemon=args.daemon,
+        idle_seconds=args.idle,
+    )
+
+
+def cmd_stop(args):
+    """Stop mempalace server."""
+    from .client import stop_server, cleanup_stale
+    from .lifecycle import is_server_running
+
+    running, pid = is_server_running()
+    if not running:
+        print("No server running.")
+        return
+
+    print(f"Stopping server (PID {pid})...")
+    if stop_server():
+        print("Server stopped.")
+    else:
+        # Force cleanup
+        cleanup_stale()
+        print("Server force-stopped (cleanup).")
 
 
 def cmd_init(args):
@@ -66,6 +99,15 @@ def cmd_init(args):
 def cmd_mine(args):
     palace_path = os.path.expanduser(args.palace) if args.palace else MempalaceConfig().palace_path
 
+    if not args.local:
+        try:
+            from .client import mine as client_mine
+            result = client_mine(args.dir, wing=args.wing, palace_path=palace_path)
+            print(result)
+            return
+        except Exception as e:
+            print(f"Server mode failed: {e}, falling back to local...")
+
     if args.mode == "convos":
         from .convo_miner import mine_convos
 
@@ -92,9 +134,16 @@ def cmd_mine(args):
 
 
 def cmd_search(args):
-    from .searcher import search
-
     palace_path = os.path.expanduser(args.palace) if args.palace else MempalaceConfig().palace_path
+    if not args.local:
+        try:
+            from .client import search as client_search
+            result = client_search(args.query, wing=args.wing, room=args.room, n_results=args.results)
+            _print_search_results(result)
+            return
+        except Exception:
+            pass  # fallback to local
+    from .searcher import search
     search(
         query=args.query,
         palace_path=palace_path,
@@ -102,6 +151,33 @@ def cmd_search(args):
         room=args.room,
         n_results=args.results,
     )
+
+
+def _print_search_results(result):
+    """Print search results from client response."""
+    # Handle nested structure from search_memories
+    data = result.get("results", {})
+    if isinstance(data, dict):
+        results = data.get("results", [])
+    else:
+        results = data if isinstance(data, list) else []
+
+    if not results:
+        print("No results found.")
+        return
+    for i, r in enumerate(results, 1):
+        if isinstance(r, dict):
+            text = r.get("text", r.get("content", str(r)))
+            wing = r.get("wing", "")
+            room = r.get("room", "")
+            sim = r.get("similarity", r.get("distance", ""))
+            loc = f"  [{wing}/{room}]" if wing else ""
+            score = f" (score: {sim:.3f})" if isinstance(sim, (int, float)) else ""
+            print(f"\n--- Result {i}{loc}{score} ---")
+            print(text[:500])
+        else:
+            print(f"\n--- Result {i} ---")
+            print(str(r)[:500])
 
 
 def cmd_wakeup(args):
@@ -141,10 +217,137 @@ def cmd_split(args):
 
 
 def cmd_status(args):
-    from .miner import status
+    if not args.local:
+        try:
+            from .client import status as client_status
+            result = client_status()
+            _print_status(result)
+            return
+        except Exception as e:
+            pass  # fallback to local
 
     palace_path = os.path.expanduser(args.palace) if args.palace else MempalaceConfig().palace_path
+    from .miner import status
     status(palace_path=palace_path)
+
+
+def _print_status(result):
+    """Print status from client response."""
+    wings = result.get("wings", {})
+    total = result.get("total_drawers", 0)
+    print(f"\n{'=' * 55}")
+    print(f"  MemPalace Status — {total} drawers")
+    print(f"{'=' * 55}")
+    for wing_name, rooms in sorted(wings.items()):
+        print(f"\n  WING: {wing_name}")
+        for room_name, count in sorted(rooms.items(), key=lambda x: x[1], reverse=True):
+            print(f"    ROOM: {room_name:20} {count} drawers")
+    print(f"\n{'=' * 55}\n")
+
+
+def cmd_add(args):
+    """Manually add a memory drawer."""
+    from .miner import get_collection, add_drawer
+    palace_path = os.path.expanduser(args.palace) if args.palace else MempalaceConfig().palace_path
+    collection = get_collection(palace_path)
+    
+    import hashlib
+    from datetime import datetime
+    drawer_id = f"drawer_{args.wing}_{args.room}_{hashlib.md5(args.content.encode()).hexdigest()[:16]}"
+    
+    success = add_drawer(
+        collection=collection,
+        wing=args.wing,
+        room=args.room,
+        content=args.content,
+        source_file=args.source or "manual",
+        chunk_index=0,
+        agent="cli"
+    )
+    if success:
+        print(f"✓ Added drawer: {drawer_id}")
+        print(f"  Wing: {args.wing}")
+        print(f"  Room: {args.room}")
+    else:
+        print("✗ Failed to add drawer (possibly duplicate)")
+
+
+def cmd_delete(args):
+    """Delete a drawer by ID."""
+    import chromadb
+    palace_path = os.path.expanduser(args.palace) if args.palace else MempalaceConfig().palace_path
+    
+    client = chromadb.PersistentClient(path=palace_path)
+    col = client.get_collection("mempalace_drawers")
+    
+    existing = col.get(ids=[args.drawer_id])
+    if not existing["ids"]:
+        print(f"✗ Drawer not found: {args.drawer_id}")
+        return
+    
+    col.delete(ids=[args.drawer_id])
+    print(f"✓ Deleted drawer: {args.drawer_id}")
+
+
+def cmd_kg(args):
+    """Show knowledge graph overview."""
+    from .knowledge_graph import KnowledgeGraph
+    palace_path = os.path.expanduser(args.palace) if args.palace else MempalaceConfig().palace_path
+    kg_path = os.path.join(os.path.dirname(palace_path), "knowledge_graph.sqlite3")
+    
+    kg = KnowledgeGraph(kg_path)
+    stats = kg.get_stats()
+    
+    print(f"\n{'=' * 50}")
+    print("  Knowledge Graph Overview")
+    print(f"{'=' * 50}")
+    print(f"  Entities:    {stats['entities']}")
+    print(f"  Relations:   {stats['relations']}")
+    print(f"  Triples:     {stats['triples']}")
+    print(f"{'─' * 50}\n")
+
+
+def cmd_kg_add(args):
+    """Add a knowledge triple."""
+    from .knowledge_graph import KnowledgeGraph
+    palace_path = os.path.expanduser(args.palace) if args.palace else MempalaceConfig().palace_path
+    kg_path = os.path.join(os.path.dirname(palace_path), "knowledge_graph.sqlite3")
+    
+    kg = KnowledgeGraph(kg_path)
+    triple_id = kg.add_triple(
+        args.subject,
+        args.predicate,
+        args.object,
+        valid_from=args.valid_from,
+        source_closet=args.source
+    )
+    print(f"✓ Added triple: {args.subject} → {args.predicate} → {args.object}")
+    print(f"  ID: {triple_id}")
+
+
+def cmd_kg_query(args):
+    """Query the knowledge graph."""
+    from .knowledge_graph import KnowledgeGraph
+    palace_path = os.path.expanduser(args.palace) if args.palace else MempalaceConfig().palace_path
+    kg_path = os.path.join(os.path.dirname(palace_path), "knowledge_graph.sqlite3")
+    
+    kg = KnowledgeGraph(kg_path)
+    results = kg.query_entity(args.entity, as_of=args.as_of, direction=args.direction)
+    
+    print(f"\n{'=' * 50}")
+    print(f"  Knowledge Graph Query: {args.entity}")
+    if args.as_of:
+        print(f"  As of: {args.as_of}")
+    print(f"{'=' * 50}\n")
+    
+    if not results:
+        print("  No results found")
+    else:
+        for r in results:
+            print(f"  {r['subject']} → {r['predicate']} → {r['object']}")
+            if r.get('valid_from'):
+                print(f"    Valid from: {r['valid_from']}")
+    print()
 
 
 def cmd_compress(args):
@@ -268,8 +471,23 @@ def main():
         default=None,
         help="Where the palace lives (default: from ~/.mempalace/config.json or ~/.mempalace/palace)",
     )
+    parser.add_argument(
+        "--version", "-V",
+        action="version",
+        version=f"mempalace {__version__}",
+    )
 
     sub = parser.add_subparsers(dest="command")
+
+    # serve
+    p_serve = sub.add_parser("serve", help="Start mempalace server (daemon mode)")
+    p_serve.add_argument("--daemon", action="store_true", help="Run in background")
+    p_serve.add_argument("--port", type=int, default=None, help="HTTP port (default: Unix socket)")
+    p_serve.add_argument("--socket", default=None, help="Unix socket path")
+    p_serve.add_argument("--idle", type=int, default=600, help="Idle timeout before auto-shutdown (seconds)")
+
+    # stop
+    p_stop = sub.add_parser("stop", help="Stop mempalace server")
 
     # init
     p_init = sub.add_parser("init", help="Detect rooms from your folder structure")
@@ -281,6 +499,7 @@ def main():
     # mine
     p_mine = sub.add_parser("mine", help="Mine files into the palace")
     p_mine.add_argument("dir", help="Directory to mine")
+    p_mine.add_argument("--local", action="store_true", help="Force local mine (skip server)")
     p_mine.add_argument(
         "--mode",
         choices=["projects", "convos"],
@@ -310,6 +529,8 @@ def main():
     p_search.add_argument("--wing", default=None, help="Limit to one project")
     p_search.add_argument("--room", default=None, help="Limit to one room")
     p_search.add_argument("--results", type=int, default=5, help="Number of results")
+
+    p_search.add_argument("--local", action="store_true", help="Force local search (skip server)")
 
     # compress
     p_compress = sub.add_parser(
@@ -351,7 +572,36 @@ def main():
     )
 
     # status
-    sub.add_parser("status", help="Show what's been filed")
+    p_status = sub.add_parser("status", help="Show what's been filed")
+    p_status.add_argument("--local", action="store_true", help="Force local status (skip server)")
+
+    # add - manually add a drawer
+    p_add = sub.add_parser("add", help="Manually add a memory drawer")
+    p_add.add_argument("content", help="Content to store")
+    p_add.add_argument("--wing", default="manual", help="Wing/project name (default: manual)")
+    p_add.add_argument("--room", default="general", help="Room/category (default: general)")
+    p_add.add_argument("--source", default=None, help="Source file name")
+
+    # delete - remove a drawer
+    p_delete = sub.add_parser("delete", help="Delete a drawer by ID")
+    p_delete.add_argument("drawer_id", help="Drawer ID to delete")
+
+    # kg - knowledge graph overview
+    p_kg = sub.add_parser("kg", help="Show knowledge graph overview")
+
+    # kg-add - add knowledge triple
+    p_kg_add = sub.add_parser("kg-add", help="Add a knowledge triple")
+    p_kg_add.add_argument("subject", help="Subject entity")
+    p_kg_add.add_argument("predicate", help="Relationship type")
+    p_kg_add.add_argument("object", help="Object entity")
+    p_kg_add.add_argument("--valid-from", default=None, help="When this became true (YYYY-MM-DD)")
+    p_kg_add.add_argument("--source", default=None, help="Source drawer ID")
+
+    # kg-query - query knowledge graph
+    p_kg_query = sub.add_parser("kg-query", help="Query the knowledge graph")
+    p_kg_query.add_argument("entity", help="Entity to query")
+    p_kg_query.add_argument("--as-of", default=None, help="Query as of date (YYYY-MM-DD)")
+    p_kg_query.add_argument("--direction", default="both", choices=["out", "in", "both"], help="Relationship direction")
 
     args = parser.parse_args()
 
@@ -360,6 +610,8 @@ def main():
         return
 
     dispatch = {
+        "serve": cmd_serve,
+        "stop": cmd_stop,
         "init": cmd_init,
         "mine": cmd_mine,
         "split": cmd_split,
@@ -368,6 +620,11 @@ def main():
         "wake-up": cmd_wakeup,
         "status": cmd_status,
     }
+    dispatch["add"] = cmd_add
+    dispatch["delete"] = cmd_delete
+    dispatch["kg"] = cmd_kg
+    dispatch["kg-add"] = cmd_kg_add
+    dispatch["kg-query"] = cmd_kg_query
     dispatch[args.command](args)
 
 
