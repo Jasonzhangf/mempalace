@@ -77,6 +77,7 @@ def cmd_init(args):
     from pathlib import Path
     from .entity_detector import scan_for_detection, detect_entities, confirm_entities
     from .room_detector_local import detect_rooms_local
+    from .watcher import start_watch_daemon, is_watch_running
 
     # Pass 1: auto-detect people and projects from file content
     print(f"\n  Scanning for entities in: {args.dir}")
@@ -99,6 +100,27 @@ def cmd_init(args):
     # Pass 2: detect rooms from folder structure
     detect_rooms_local(project_dir=args.dir, yes=getattr(args, "yes", False))
     MempalaceConfig().init()
+
+    # Pass 3: Full index immediately after init
+    print("\n  Running initial index...")
+    from .miner import mine
+    palace_path = MempalaceConfig().palace_path
+    mine(args.dir, palace_path=palace_path)
+
+    # Pass 4: Start background watcher
+    print("\n  Starting background watcher...")
+    running, pid = is_watch_running(args.dir)
+    if running:
+        print(f"  Watcher already running (PID {pid})")
+    else:
+        start_watch_daemon(args.dir)
+        print("  Watcher started - will auto-index on file changes")
+
+    print("\n  ✓ MemPalace setup complete!")
+    wing_name = Path(args.dir).expanduser().resolve().name.lower().replace(" ", "_").replace("-", "_")
+    print(f"    Search: mempalace search \"query\" --wing {wing_name}")
+    print(f"    Status: mempalace status --local")
+    print(f"    Logs:   {args.dir}/.mempalace/watch.log")
 
 
 def cmd_mine(args):
@@ -234,6 +256,33 @@ def cmd_status(args):
     palace_path = os.path.expanduser(args.palace) if args.palace else MempalaceConfig().palace_path
     from .miner import status
     status(palace_path=palace_path)
+
+
+
+def cmd_watch(args):
+    """Start/stop background file watcher."""
+    from .watcher import start_watch_daemon, stop_watch, is_watch_running
+    project_dir = args.dir
+    
+    if args.status:
+        running, pid = is_watch_running(project_dir)
+        if running:
+            print(f"Watcher running (PID {pid})")
+        else:
+            print("No watcher running for this project.")
+        return
+    
+    if args.stop:
+        stop_watch(project_dir)
+        return
+    
+    # Start watcher
+    running, pid = is_watch_running(project_dir)
+    if running:
+        print(f"Watcher already running (PID {pid})")
+    else:
+        start_watch_daemon(project_dir)
+
 
 
 def _print_status(result):
@@ -580,6 +629,12 @@ def main():
     p_status = sub.add_parser("status", help="Show what's been filed")
     p_status.add_argument("--local", action="store_true", help="Force local status (skip server)")
 
+    # watch
+    p_watch = sub.add_parser("watch", help="Start background file watcher for auto-indexing")
+    p_watch.add_argument("dir", nargs="?", default=".", help="Project directory to watch")
+    p_watch.add_argument("--stop", action="store_true", help="Stop watcher for this project")
+    p_watch.add_argument("--status", action="store_true", help="Check watcher status")
+
     # add - manually add a drawer
     p_add = sub.add_parser("add", help="Manually add a memory drawer")
     p_add.add_argument("content", help="Content to store")
@@ -654,6 +709,7 @@ def main():
     dispatch["restore"] = cmd_restore
     dispatch["backup-list"] = cmd_backup_list
     dispatch["backup-test"] = cmd_backup_test
+    dispatch["watch"] = cmd_watch
     dispatch[args.command](args)
 
 
