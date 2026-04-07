@@ -217,8 +217,10 @@ def print_proposed_structure(project_name: str, rooms: list, total_files: int, s
 
 def get_user_approval(rooms: list) -> list:
     """Same approval flow as AI version."""
-    # Check for non-interactive mode from environment or sys.argv
-    if "--yes" in sys.argv or os.environ.get("MEMPALACE_YES"):
+    # Check for non-interactive mode
+    # Note: yes parameter passed from CLI, sys.argv check is fallback
+    yes_mode = "--yes" in sys.argv or os.environ.get("MEMPALACE_YES", "").lower() in ("1", "true", "yes")
+    if yes_mode:
         print("  Auto-accepting all rooms (non-interactive mode).")
         return rooms
 
@@ -272,7 +274,7 @@ def save_config(project_dir: str, project_name: str, rooms: list):
     print(f"\n{'=' * 55}\n")
 
 
-def detect_rooms_local(project_dir: str):
+def detect_rooms_local(project_dir: str, yes: bool = False):
     """Main entry point for local setup."""
     project_path = Path(project_dir).expanduser().resolve()
     project_name = project_path.name.lower().replace(" ", "_").replace("-", "_")
@@ -301,5 +303,8 @@ def detect_rooms_local(project_dir: str):
         source = "fallback (flat project)"
 
     print_proposed_structure(project_name, rooms, len(files), source)
+    # Pass yes mode to approval function
+    if yes:
+        os.environ["MEMPALACE_YES"] = "1"
     approved_rooms = get_user_approval(rooms)
     save_config(project_dir, project_name, approved_rooms)
