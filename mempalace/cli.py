@@ -105,7 +105,8 @@ def cmd_init(args):
     print("\n  Running initial index...")
     from .miner import mine
     palace_path = MempalaceConfig().palace_path
-    mine(args.dir, palace_path=palace_path)
+    extra_skip = set(d.strip() for d in args.skip_dirs.split(',') if d.strip()) if args.skip_dirs else None
+    mine(args.dir, palace_path=palace_path, extra_skip_dirs=extra_skip)
 
     # Pass 4: Start background watcher
     print("\n  Starting background watcher...")
