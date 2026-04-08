@@ -150,6 +150,9 @@ def cmd_mine(args):
     else:
         from .miner import mine
 
+        # Parse extra skip dirs
+        extra_skip = set(d.strip() for d in args.skip_dirs.split(',') if d.strip()) if args.skip_dirs else None
+        
         mine(
             project_dir=args.dir,
             palace_path=palace_path,
@@ -157,6 +160,7 @@ def cmd_mine(args):
             agent=args.agent,
             limit=args.limit,
             dry_run=args.dry_run,
+            extra_skip_dirs=extra_skip,
         )
 
 
@@ -637,6 +641,7 @@ def main():
     p_init.add_argument(
         "--yes", action="store_true", help="Auto-accept all detected entities (non-interactive)"
     )
+    p_init.add_argument("--skip-dirs", default="", help="Extra dirs to skip (comma-sep: data,assets)")
 
     # mine
     p_mine = sub.add_parser("mine", help="Mine files into the palace")

@@ -284,12 +284,14 @@ def process_file(
 # =============================================================================
 
 
-def scan_project(project_dir: str) -> list:
+def scan_project(project_dir: str, skip_dirs: set = None) -> list:
     """Return list of all readable file paths."""
+    if skip_dirs is None:
+        skip_dirs = SKIP_DIRS
     project_path = Path(project_dir).expanduser().resolve()
     files = []
     for root, dirs, filenames in os.walk(project_path):
-        dirs[:] = [d for d in dirs if d not in SKIP_DIRS]
+        dirs[:] = [d for d in dirs if d not in skip_dirs]
         for filename in filenames:
             filepath = Path(root) / filename
             if filepath.suffix.lower() in READABLE_EXTENSIONS:
@@ -319,6 +321,7 @@ def mine(
     agent: str = "mempalace",
     limit: int = 0,
     dry_run: bool = False,
+    extra_skip_dirs: set = None,
 ):
     """Mine a project directory into the palace."""
 
@@ -327,8 +330,13 @@ def mine(
 
     wing = wing_override or config["wing"]
     rooms = config.get("rooms", [{"name": "general", "description": "All project files"}])
+    
+    # Merge extra skip dirs
+    effective_skip_dirs = SKIP_DIRS.copy()
+    if extra_skip_dirs:
+        effective_skip_dirs.update(extra_skip_dirs)
 
-    files = scan_project(project_dir)
+    files = scan_project(project_dir, effective_skip_dirs)
     if limit > 0:
         files = files[:limit]
 
